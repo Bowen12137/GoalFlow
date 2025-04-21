@@ -18,5 +18,5 @@ Download the following files from [Google Drive](https://drive.google.com/drive/
 
 ```bash
 sh scripts/generate/run_generate_trajs.sh
-sh scripts/generate/run_goalflow_trajs.sh
+sh scripts/evaluation/run_goalflow_trajs.sh
 ```
