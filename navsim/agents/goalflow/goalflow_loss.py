@@ -17,9 +17,45 @@ def goalflow_loss(
     :param config: global Transfuser config
     :return: combined loss value
     """
-    # TODO training code will be comming soon
     loss_dict={'im_score_loss':None,'dac_score_loss':None,'trajectory_loss':None,'bev_semantic_loss':None,'agent_class_loss':None,'agent_box_loss':None,
                'dac_loss':None,'loss':None}
+    loss_dict['bev_semantic_loss'] = F.cross_entropy(
+        predictions["bev_semantic_map"], targets["bev_semantic_map"].long()
+    )
+
+    # only perception
+    if config.only_perception:
+        loss_dict['agent_class_loss'], loss_dict['agent_box_loss'] = _agent_loss(targets, predictions, config)
+        loss_dict['loss'] = (
+            config.agent_class_weight * loss_dict['agent_class_loss']
+            + config.agent_box_weight * loss_dict['agent_box_loss']
+            + config.bev_semantic_weight * loss_dict['bev_semantic_loss']
+        )
+
+    # train flow
+    elif 'dac_score_loss' not in predictions:
+        loss_dict['trajectory_loss']=F.l1_loss(predictions["trajectory"],predictions['target'])
+        if config.agent_loss==True:
+            loss_dict['agent_class_loss'], loss_dict['agent_box_loss'] = _agent_loss(targets, predictions, config)
+        else:
+            loss_dict['agent_class_loss'],loss_dict['agent_box_loss']=0,0
+
+        loss_dict['loss'] = (
+            config.trajectory_weight * loss_dict['trajectory_loss']
+            + config.agent_class_weight * loss_dict['agent_class_loss']
+            + config.agent_box_weight * loss_dict['agent_box_loss']
+            + config.bev_semantic_weight * loss_dict['bev_semantic_loss']
+        )
+    
+    # train goalpoint construction
+    else:
+        loss_dict['dac_score_loss']=predictions['dac_score_loss']
+        loss_dict['im_score_loss']=predictions['im_score_loss']
+        loss_dict['loss'] = (
+            config.dac_score_weight * loss_dict['dac_score_loss']
+            + config.im_score_weight * loss_dict['im_score_loss']
+            + config.bev_semantic_weight * loss_dict['bev_semantic_loss']
+        )
 
     return loss_dict
 

@@ -48,8 +48,23 @@ class AgentLightningModule(pl.LightningModule):
     ):
         features, targets = batch
         prediction = self.agent.forward(features,targets)
+        if self.agent._config.generate=='goal_score':
+            log_dir = self.logger.log_dir if self.logger else "./default_log_dir"
+            navis_dir_path = os.path.join(log_dir, "navis")
+            os.makedirs(navis_dir_path, exist_ok=True)
+            im_path=os.path.join(navis_dir_path,'im')
+            dac_path=os.path.join(navis_dir_path,'dac')
+            os.makedirs(im_path, exist_ok=True)
+            os.makedirs(dac_path,exist_ok=True)
+            batch_size=prediction['im_scores'].shape[0]
+            for i in range(batch_size):
+                token=features['token'][i]
+                im_score=prediction['im_scores'][i].squeeze().cpu().numpy()
+                dac_score=prediction['dac_scores'][i].squeeze().cpu().numpy()
+                np.save(f'{dac_path}/{token}.npy',dac_score)
+                np.save(f'{im_path}/{token}.npy',im_score)
 
-        if self.agent._config.generate=='trajectory':
+        elif self.agent._config.generate=='trajectory':
             log_dir = self.logger.log_dir if self.logger else "./default_log_dir"
             trajs_dir_path = os.path.join(log_dir, "trajs")
             os.makedirs(trajs_dir_path, exist_ok=True)
@@ -60,7 +75,7 @@ class AgentLightningModule(pl.LightningModule):
                 traj = prediction['trajectory'][i].squeeze(0).cpu().numpy()
                 np.save(f'{trajs_dir_path}/{token}.npy', traj)
         else:
-            raise Exception('generate should be in (trajectory)')
+            raise Exception('generate should be in (goal_score,trajectory)')
         return prediction
 
     def configure_optimizers(self):

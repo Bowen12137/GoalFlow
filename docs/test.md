@@ -10,6 +10,7 @@ Download the following files from [Google Drive](https://drive.google.com/drive/
 - `goalflow_traj_epoch=54-step=18260.ckpt` (perception module and trajectory decoder)
 - `goal_point_scores.gz` (dac scores and distance scores predicted by goal point construction)
 - `cluster_points_8192_.npy` (goal point vocabulary)
+- `goalflow_navi_epoch=99-step=132500.ckpt` (optional, perception module and goal point construction module)
 
 ## Evaluating GoalFlow
 
@@ -20,3 +21,10 @@ Download the following files from [Google Drive](https://drive.google.com/drive/
 sh scripts/generate/run_generate_trajs.sh
 sh scripts/evaluation/run_goalflow_trajs.sh
 ```
+
+## Evaluating the Goal Point Construction Module (Optional)
+If needed, you can generate ``goal_point_scores`` using ``run_generate_navi.sh``. The generated navigation scores will be stored in your log directory.
+```bash
+sh scripts/generate/run_generate_navi.sh
+```
+
