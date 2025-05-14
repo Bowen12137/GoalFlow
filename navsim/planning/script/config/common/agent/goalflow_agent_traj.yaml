@@ -44,6 +44,28 @@ config:
   agent_class_weight: 10.0
   agent_box_weight: 1.0
   bev_semantic_weight: 10.0
-  
+
+  # trajectory_weight: 50.0
+  # mlp_trajectory_weight: 0.0
+  # navi_weight: 0.0
+  # agent_class_weight: 0.2
+  # agent_box_weight: 0.05
+  # bev_semantic_weight: 0.2
+  # drivable_area_weight: 0.2
+  # dac_weight: 0.2
+
+  # trajectory_weight: 50.0
+  # mlp_trajectory_weight: 0.0
+  # navi_weight: 0.0
+  # agent_class_weight: 0.2
+  # agent_box_weight: 0.05
+  # bev_semantic_weight: 0.2
+  # drivable_area_weight: 0.0
+  # dac_weight: 0.0
+
+  # bev_semantic_weight: 10
+  # dac_score_weight: 0.005
+  # im_score_weight: 1.0
+
 checkpoint_path: null
 lr: 1e-4

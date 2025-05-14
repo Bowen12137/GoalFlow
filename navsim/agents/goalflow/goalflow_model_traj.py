@@ -164,8 +164,17 @@ class GoalFlowTrajModel(nn.Module):
 
         trajectory_query, agents_query = query_out.split(self._query_splits, dim=1)
 
+        agents = self._agent_head(agents_query)
+        bev_semantic_map = self._bev_semantic_head(bev_feature_upscale)
+
+        if self._config.only_perception:
+            output: Dict[str, torch.Tensor] = {"bev_semantic_map": bev_semantic_map}
+            output.update(agents)
+            output.update({'trajectory':gt_trajs}) # use gt trajectorie as placeholder.
+            return output
 
         # =================================== flow ==================================================
+        target=gt_trajs
         if self._config.has_navi:
             navi=gt_trajs[:,7:8,:2].clone().to(device)
             navi_feature=pos2posemb2d(navi,num_pos_feats=self._config.tf_d_model//2).squeeze(1)
@@ -234,10 +243,10 @@ class GoalFlowTrajModel(nn.Module):
             start_point=torch.zeros((gt_trajs.shape[0],1,3)).to(gt_trajs)
             gt_trajs_=torch.cat([start_point,gt_trajs_],dim=1)
 
-        
+        target=torch.zeros_like(gt_trajs_)
+        normal_trajs = self.normalize_xy_rotation(gt_trajs_, N=gt_trajs_.shape[-2], times=10).to(gt_trajs_)
         if self._config.training:
-            # TODO training code will be comming soon.
-            pass
+            noise=torch.randn(size=(batch_size,12,30),device=normal_trajs.device,dtype=dtype).to(global_feature)*self._config.train_scale
         else:
             noise=torch.randn(size=(batch_size*self._config.anchor_size,12,30),dtype=dtype,device=device)*self._config.test_scale
         
@@ -250,14 +259,38 @@ class GoalFlowTrajModel(nn.Module):
 
         # =================================== flow training ==================================================
         if self._config.training:
-            # TODO training code will be comming soon.
-            pass 
+
+            batch_size = normal_trajs.shape[0]
+
+            if self._config.start:
+                noise[:,[0],:]=normal_trajs[:,[0],:]
+
+            noisy_traj_points,t,target=get_train_tuple(z0=noise,z1=normal_trajs)
+
+            timesteps=t*self._config.infer_steps
+            
+            import random
+            if self._config.has_navi:
+                flag=random.randint(1,3)
+                if flag==1:
+                    pred=self.denoise(noisy_traj_points,timesteps,global_feature).reshape(batch_size,-1,30)
+                elif flag==2:
+                    pred=self.denoise(noisy_traj_points,timesteps,global_feature,force_dropout=True).reshape(batch_size,-1,30)
+                elif flag==3:
+                    pred=self.denoise(noisy_traj_points,timesteps,global_feature,navi_dropout=True).reshape(batch_size,-1,30)
+            else:
+                flag=random.randint(1,2)
+                if flag==1:
+                    pred=self.denoise(noisy_traj_points,timesteps,global_feature).reshape(batch_size,-1,30)
+                elif flag==2:
+                    pred=self.denoise(noisy_traj_points,timesteps,global_feature,force_dropout=True).reshape(batch_size,-1,30)  
+        
         # =================================== flow sampling ==================================================
         else:
 
             trajs=noise
             if self._config.start:
-                trajs[:,[0],:]=0.0
+                trajs[:,[0],:]=normal_trajs[:1,[0],:]
 
             if self._config.has_navi or self._config.has_student_navi:
                 features=global_feature[0].unsqueeze(1).repeat(1,self._config.anchor_size,1,1).view(-1,2,self._config.tf_d_model)
@@ -376,8 +409,10 @@ class GoalFlowTrajModel(nn.Module):
             else:
                 pred=pred_trajs[:,:,:8,:].mean(1)
 
-        output={}
+        output: Dict[str, torch.Tensor] = {"bev_semantic_map": bev_semantic_map}
         output.update({'trajectory':pred})
+        output.update({'target':target})
+        output.update(agents)
 
         return output
 
@@ -480,6 +515,28 @@ class GoalFlowTrajModel(nn.Module):
         trajectory = resulting_trajectory.permute(0,2,1)
         return trajectory
 
+    def normalize_xy_rotation(self, trajectory, N=8, times=10):
+        downsample_trajectory = trajectory[:, :N, :].detach().clone()
+        x_scale = 60
+        y_scale = 15
+        heading_scale = math.pi
+        downsample_trajectory[:, :, 0] /= x_scale
+        downsample_trajectory[:, :, 1] /= y_scale
+        downsample_trajectory[:,:,2]/=heading_scale
+        downsample_trajectory[:,:,2]=downsample_trajectory[:,:,2].atanh()
+        
+        rotated_trajectories = []
+        for i in range(times):
+            theta = 2 * math.pi * i / times
+            rotation_matrix, _ = get_rotation_matrices(theta)
+            rotation_matrix = rotation_matrix.unsqueeze(0).expand(downsample_trajectory.size(0), -1, -1).to(downsample_trajectory)
+            
+            rotated_trajectory = apply_rotation(downsample_trajectory[:,:,:2], rotation_matrix)
+            rotated_trajectory=torch.cat([rotated_trajectory,downsample_trajectory[:,:,-1:].permute(0,2,1)],dim=1)
+            rotated_trajectories.append(rotated_trajectory)
+        resulting_trajectory = torch.cat(rotated_trajectories, 1)
+        trajectory = resulting_trajectory.permute(0,2,1)
+        return trajectory
     
     def denormalize_xy_rotation(self, trajectory, N=8, times=10):
         inverse_rotated_trajectories = []
@@ -500,6 +557,91 @@ class GoalFlowTrajModel(nn.Module):
         final_trajectory[:,:,2]=final_trajectory[:,:,2].tanh() * math.pi
         return final_trajectory
     
+    def normalize_xy_rotation2(self, trajectory, N=8, times=10):
+        downsample_trajectory = trajectory[:, :N, :].detach().clone()
+        x_scale = 45.
+        y_scale = 42.
+        heading_scale = math.pi
+        downsample_trajectory[:,:,0] -= x_scale
+        downsample_trajectory[:, :, 0] /= x_scale
+        downsample_trajectory[:, :, 1] /= y_scale
+        downsample_trajectory[:,:,2]/=heading_scale
+        
+        rotated_trajectories = []
+        for i in range(times):
+            theta = 2 * math.pi * i / times
+            rotation_matrix, _ = get_rotation_matrices(theta)
+            rotation_matrix = rotation_matrix.unsqueeze(0).expand(downsample_trajectory.size(0), -1, -1).to(downsample_trajectory)
+            
+            rotated_trajectory = apply_rotation(downsample_trajectory[:,:,:2], rotation_matrix)
+            rotated_trajectory=torch.cat([rotated_trajectory,downsample_trajectory[:,:,-1:].permute(0,2,1)],dim=1)
+            rotated_trajectories.append(rotated_trajectory)
+        resulting_trajectory = torch.cat(rotated_trajectories, 1)
+        trajectory = resulting_trajectory.permute(0,2,1)
+        return trajectory
+    
+    def denormalize_xy_rotation2(self, trajectory, N=8, times=10):
+        batch, num_pts, dim = trajectory.shape
+        inverse_rotated_trajectories = []
+        for i in range(times):
+            theta = 2 * math.pi * i / 10
+            rotation_matrix, inverse_rotation_matrix = get_rotation_matrices(theta)
+            inverse_rotation_matrix = inverse_rotation_matrix.unsqueeze(0).expand(trajectory.size(0), -1, -1).to(trajectory)
+        
+            inverse_rotated_trajectory = apply_rotation(trajectory[:, :, 3*i:3*i+2], inverse_rotation_matrix)
+            inverse_rotated_trajectory=torch.cat([inverse_rotated_trajectory,trajectory[:,:,3*i+2:3*i+3].permute(0,2,1)],dim=1)
+            inverse_rotated_trajectories.append(inverse_rotated_trajectory)
+
+        final_trajectory = torch.cat(inverse_rotated_trajectories, 1).permute(0,2,1)
+        
+        final_trajectory = final_trajectory[:, :, :3]
+        final_trajectory[:, :, 0] *= 45.
+        final_trajectory[:,:,0]+=45.
+        final_trajectory[:, :, 1] *= 42.
+        final_trajectory[:,:,2]=final_trajectory[:,:,2]*math.pi
+        return final_trajectory
+
+    def normalize_xy_rotation3(self, trajectory, N=8, times=10):
+        downsample_trajectory = trajectory[:, :N, :].detach().clone()
+        x_scale = 90
+        y_scale = 45
+        heading_scale = math.pi
+        downsample_trajectory[:, :, 0] /= x_scale
+        downsample_trajectory[:, :, 1] /= y_scale
+        downsample_trajectory[:,:,2]/=heading_scale
+        downsample_trajectory[:,:,2]=downsample_trajectory[:,:,2].atanh()
+        
+        rotated_trajectories = []
+        for i in range(times):
+            theta = 2 * math.pi * i / times
+            rotation_matrix, _ = get_rotation_matrices(theta)
+            rotation_matrix = rotation_matrix.unsqueeze(0).expand(downsample_trajectory.size(0), -1, -1).to(downsample_trajectory)
+            
+            rotated_trajectory = apply_rotation(downsample_trajectory[:,:,:2], rotation_matrix)
+            rotated_trajectory=torch.cat([rotated_trajectory,downsample_trajectory[:,:,-1:].permute(0,2,1)],dim=1)
+            rotated_trajectories.append(rotated_trajectory)
+        resulting_trajectory = torch.cat(rotated_trajectories, 1)
+        trajectory = resulting_trajectory.permute(0,2,1)
+        return trajectory
+    
+    def denormalize_xy_rotation3(self, trajectory, N=8, times=10):
+        inverse_rotated_trajectories = []
+        for i in range(times):
+            theta = 2 * math.pi * i / 10
+            rotation_matrix, inverse_rotation_matrix = get_rotation_matrices(theta)
+            inverse_rotation_matrix = inverse_rotation_matrix.unsqueeze(0).expand(trajectory.size(0), -1, -1).to(trajectory)
+        
+            inverse_rotated_trajectory = apply_rotation(trajectory[:, :, 3*i:3*i+2], inverse_rotation_matrix)
+            inverse_rotated_trajectory=torch.cat([inverse_rotated_trajectory,trajectory[:,:,3*i+2:3*i+3].permute(0,2,1)],dim=1)
+            inverse_rotated_trajectories.append(inverse_rotated_trajectory)
+
+        final_trajectory = torch.cat(inverse_rotated_trajectories, 1).permute(0,2,1)
+        
+        final_trajectory = final_trajectory[:, :, :3]
+        final_trajectory[:, :, 0] *= 90
+        final_trajectory[:, :, 1] *= 45
+        final_trajectory[:,:,2]=final_trajectory[:,:,2].tanh() * math.pi
+        return final_trajectory
 
 class AgentHead(nn.Module):
     def __init__(

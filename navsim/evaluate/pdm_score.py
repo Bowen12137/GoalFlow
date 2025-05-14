@@ -156,4 +156,36 @@ def pdm_score(
         comfort,
         score,
     )
+
+def dac_score(
+    metric_cache: MetricCache,
+    model_trajectory: List[Trajectory],
+    future_sampling: TrajectorySampling,
+    simulator: PDMSimulator,
+    scorer: PDMScorer
+) -> PDMResults:
+    """
+    Runs PDM-Score and saves results in dataclass.
+    :param metric_cache: Metric cache dataclass
+    :param model_trajectory: Predicted trajectory in ego frame.
+    :return: Dataclass of PDM-Subscores.
+    """
+
+    initial_ego_state = metric_cache.ego_state
+
+    traj_num=len(model_trajectory)
+    trajectory_list=[transform_trajectory(model_trajectory[i],initial_ego_state) for i in range(traj_num)]
+    states_list=[get_trajectory_as_array(trajectory_list[i],future_sampling,initial_ego_state.time_point) for i in range(traj_num)]
+
+    trajectory_states=np.concatenate([states[None,...] for states in states_list],axis=0)
+
+    scores = scorer.score_dac(
+        trajectory_states,
+        metric_cache.observation,
+        metric_cache.centerline,
+        metric_cache.route_lane_ids,
+        metric_cache.drivable_area_map,
+    )
+    drivable_area_compliance = scorer._multi_metrics[MultiMetricIndex.DRIVABLE_AREA]
+    return drivable_area_compliance
     
