@@ -8,7 +8,7 @@
 
 > [**GoalFlow: Goal-Driven Flow Matching for Multimodal Trajectories Generation
 in End-to-End Autonomous Driving**](https://arxiv.org/abs/2503.05689)  <br>
-> [Zebin Xing](https://github.com/ZebinX)<sup>1,2*</sup>, [Xingyu Zhang]()<sup>2*</sup>, [Yang Hu]()<sup>1,2</sup>, [Bo Jiang]()<sup>4,2</sup>, [Tong He](https://tonghe90.github.io/)<sup>5</sup>, [Qian Zhang]()<sup>2</sup>, [Xiaoxiao Long](https://www.xxlong.site/)<sup>3</sup>, [Wei Yin](https://yvanyin.net/)<sup>2✝</sup>  <br>
+> [Zebin Xing](https://github.com/ZebinX)<sup>1,2*</sup>, [Xingyu Zhang]()<sup>2*</sup>, [Yang Hu]()<sup>1,2</sup>, [Bo Jiang]()<sup>4,2</sup>, [Tong He](https://tonghe90.github.io/)<sup>5</sup>, [Qian Zhang]()<sup>2</sup>, [Xiaoxiao Long](https://www.xxlong.site/)<sup>3</sup>, [Wei Yin](https://yvanyin.xyz/)<sup>2✝</sup>  <br>
 > <sup>1</sup> University of Chinese Academy of Sciences, <sup>2</sup> Horizon Robotics, <sup>3</sup> Nanjing University, <sup>4</sup> Huazhong University of Science & Technology, <sup>3</sup> Shanghai AI Laboratory  <br>
 > <br>
 > Computer Vision and Pattern Recognition (CVPR), 2025 <br>
